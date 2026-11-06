@@ -1,0 +1,12 @@
+.venv/
+.local_packages/
+__pycache__/
+output/
+.env
+.env.*
+.github-upload/
+# Materiale sorgente del corso: resta locale, non necessario nel repository.
+/COJ21_COZ22_historical_series.xlsx
+/unpivoted_bid_offer_train_clean.parquet
+/HedgingLab.pdf
+/Note Hedging.pdf
