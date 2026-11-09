@@ -10,6 +10,7 @@ df_excel = pd.read_excel("COJ21_COZ22_historical_series.xlsx", sheet_name="COJ21
 
 # estrazione prezzi di COJ21 dal parquet
 df_coj21 = df.loc[df["actual_underlying_ticker"] == "COJ21", ["date", "actual_underlying_ticker", "underlying_settlement"]].drop_duplicates()
+df_cok21 = df.loc[df["actual_underlying_ticker"] == "COK21", ["date", "actual_underlying_ticker", "underlying_settlement"]].drop_duplicates()
 
 # confronto prezzi di CJO21 tra excel e parquet sulle date che condividono
 df_merge = pd.merge(df_coj21, df_excel, on = "date", how = "inner")
@@ -82,18 +83,29 @@ dt = dt_fixing.to_numpy()
 print(dt.shape)
 print(dt)
 
+n_F1 = len(fixing_apr21)
+n_F2 = len(fixing_may21)
 #generazione rumore gaussiano
 rho = 0.8
 M =100000
 n_step = len(dt)
 F0_apr21 = df_coj21["underlying_settlement"].iloc[0]
-sigma_apr21 = np.interp(F0, options_apr21["strike"], IV_apr21)
-rng = np.random.default_rng(seed)
+F0_may21 = df_cok21["underlying_settlement"].iloc[0]
+
+sigma_apr21 = np.interp(F0_apr21, options_apr21["strike"], IV_apr21)
+sigma_may21 = np.interp(F0_may21, options_may21["strike"], IV_may21)
+rng = np.random.default_rng(42)
 Z = rng.standard_normal((M, n_step, 2))
 #creiamo W correlati w1 = z1    w2=z1*rho + z2*sqrt(1-rho**2)
 W1 = Z[:,:,0]
-W2 = W1*rho + Z[:,:,1] * np.sqrt(1-rho**2)
-increments_1 = (-0.5 * sigma_1**2 * dt + np.sqrt(dt) * W1)
+W2 = W1*rho + Z[:,:,2] * np.sqrt(1-rho**2)
+
+increments_1 = (-0.5 * sigma_apr21**2 * dt + np.sqrt(dt) * W1)
 log_returns_1 = np.cumsum(increments_1, axis=1)
-increments_2 = (-0.5 * sigma_2**2 * dt + np.sqrt(dt) * W1)
+increments_2 = (-0.5 * sigma_may21**2 * dt + np.sqrt(dt) * W2)
 log_returns_2 = np.cumsum(increments_2, axis=1)
+F1 = F0_apr21 * np.exp(log_returns_1)
+F2 = F0_may21 * np.exp(log_returns_2)
+print(F1)
+print(F2)
+
