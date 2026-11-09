@@ -2,12 +2,7 @@ import pandas as pd
 from scipy.optimize import brentq
 import matplotlib.pyplot as plt
 from black76 import black_76
-
-
-
-
-
-
+import numpy as np
 
 #estrazione dati da excel e parquet
 df = pd.read_parquet("unpivoted_bid_offer_train_clean.parquet")
@@ -67,9 +62,38 @@ plt.title("Brent volatility smiles - 06/01/2020")
 plt.legend()
 plt.grid(True)
 plt.show()
-
 #abbiamo solo 9 punti sullo smile... dovuto al fatto che put e call coincidono siugli strikes
 #print(options_apr21["strike"].nunique())
 
 
+#simulazione montecarlo per il pricing:
 
+#costruzione calendario
+first_fixing = pd.Timestamp("2021-02-01")
+last_apr21 = pd.Timestamp("2021-02-24") #al penultimo giorno il contratto smette did essere liquido
+maturity = pd.Timestamp("2021-02-26")
+
+fixing_apr21 = pd.bdate_range(start=first_fixing, end=last_apr21)
+fixing_may21 = pd.bdate_range(start=last_apr21 + pd.offsets.BDay(1), end=maturity)
+fixing = fixing_apr21.append(fixing_may21)
+fixing = fixing.insert(0, emission_date)
+dt_fixing = fixing.to_series().diff().dropna().dt.days/365
+dt = dt_fixing.to_numpy()
+print(dt.shape)
+print(dt)
+
+#generazione rumore gaussiano
+rho = 0.8
+M =100000
+n_step = len(dt)
+F0_apr21 = df_coj21["underlying_settlement"].iloc[0]
+sigma_apr21 = np.interp(F0, options_apr21["strike"], IV_apr21)
+rng = np.random.default_rng(seed)
+Z = rng.standard_normal((M, n_step, 2))
+#creiamo W correlati w1 = z1    w2=z1*rho + z2*sqrt(1-rho**2)
+W1 = Z[:,:,0]
+W2 = W1*rho + Z[:,:,1] * np.sqrt(1-rho**2)
+increments_1 = (-0.5 * sigma_1**2 * dt + np.sqrt(dt) * W1)
+log_returns_1 = np.cumsum(increments_1, axis=1)
+increments_2 = (-0.5 * sigma_2**2 * dt + np.sqrt(dt) * W1)
+log_returns_2 = np.cumsum(increments_2, axis=1)
