@@ -1,8 +1,9 @@
-"""Interfaccia storica per la ricerca dello strike put."""
-
-from price_collar import legacy_average, zero_cost_put_strike
-
+from scipy.optimize import brentq
+import numpy as np
 
 def find_K(paths_apr21, paths_may21, Kc):
-    average = legacy_average(paths_apr21, paths_may21)
-    return zero_cost_put_strike(average, Kc, lower=1e-5, upper=150)
+#we need to impose that call(Kc)=put(Kp)
+    N = paths_may21.shape[1]
+    A = (paths_apr21[:,:-2].sum(axis=1) + paths_may21[:,-2:].sum(axis=1))/N
+    K = brentq(lambda x: np.maximum(x - A, 0).mean() - np.maximum(A - Kc, 0).mean(),1e-5,150)
+    return K
