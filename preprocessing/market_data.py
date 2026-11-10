@@ -15,9 +15,7 @@ def prepare_market_data(data_dir, emission_date, contracts):
     quotes = quotes.loc[quotes["actual_underlying_ticker"].isin(contracts)]
     spot = load_futures(data_dir, quotes, contracts)
 
-    quotes = quotes.loc[quotes["date"] == emission_date].drop(
-        columns=["underlying_bid", "underlying_ask"],
-    )
+
     return filter_smile_quotes(filter_option_quotes(quotes)), spot
 
 
