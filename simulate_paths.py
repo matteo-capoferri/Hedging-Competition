@@ -42,3 +42,8 @@ def simulate_paths(initial_price_apr21, initial_price_may21,
     paths_apr21 = initial_price_apr21 * np.exp(log_returns_apr21)
     paths_may21 = initial_price_may21 * np.exp(log_returns_may21)
     return paths_apr21, paths_may21
+
+
+def mean_fixing_prices(paths_april, paths_may):
+    """Restituisce la media dei percorsi all'ultimo fixing di ogni contratto."""
+    return paths_april[:, -3].mean(), paths_may[:, -1].mean()
