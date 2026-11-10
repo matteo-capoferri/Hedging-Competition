@@ -1,7 +1,7 @@
 import numpy as np
 
-from find_K import find_K
-from simulate_paths import simulate_paths
+from models.simulate_paths import simulate_paths
+from pricing.find_K import find_K
 
 
 def calculate_collar_strike(spot, smiles, date, contracts, time_steps, call_strike,

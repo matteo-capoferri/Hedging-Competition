@@ -4,11 +4,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from extract_smile import extract_smile
-from calculate_collar_strike import calculate_collar_strike
+from models.extract_smile import extract_smile
 from plot_smiles import plot_smiles
 from preprocessing.build_calendar import build_calendar
 from preprocessing.market_data import prepare_market_data
+from pricing.calculate_collar_strike import calculate_collar_strike
 
 DATA_DIR = Path(__file__).resolve().parent
 EMISSION_DATE = pd.Timestamp("2020-01-06")

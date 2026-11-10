@@ -3,8 +3,8 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from black76 import black_76
-from extract_smile import extract_smile
+from models.black76 import black_76
+from models.extract_smile import extract_smile
 
 
 class SmileTests(unittest.TestCase):

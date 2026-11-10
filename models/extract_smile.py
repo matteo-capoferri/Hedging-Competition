@@ -1,7 +1,7 @@
 import pandas as pd
 from scipy.optimize import brentq
 
-from black76 import black_76
+from models.black76 import black_76
 
 
 def extract_smile(quotes):
