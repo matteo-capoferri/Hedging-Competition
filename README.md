@@ -22,9 +22,11 @@ Le due funzioni sono in `preprocessing/options.py`.
 - `filter_smile_quotes` verifica tipo di opzione, strike, prezzo del future e
   limiti del settlement usato per il calcolo della volatilità implicita.
 
-`prepare_market_data` restituisce due DataFrame alla data di emissione.
-`quotes` contiene le opzioni che passano entrambi i filtri. `spot` contiene
-il settlement di COJ21 da Excel e quello di COK21 dal Parquet.
+`prepare_market_data` restituisce due DataFrame. `quotes` contiene le opzioni
+alla data di emissione che passano entrambi i filtri. `spot` contiene lo
+storico disponibile dei futures COJ21 (Excel) e COK21 (Parquet), con le colonne
+`date`, `future_ticker`, `settlement`, `bid` e `ask`. Le osservazioni identiche
+vengono accorpate. Bid e ask diversi per la stessa data restano visibili.
 
 `main.py` chiama in sequenza la preparazione dei dati, il calendario,
 gli smile, la simulazione e il calcolo del collar. Il calendario usa

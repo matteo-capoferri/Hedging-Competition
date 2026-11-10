@@ -54,7 +54,12 @@ def _smiles_by_contract(quotes, contracts):
 
 def initial_conditions(smiles, spot, contracts):
     """Restituisce prezzi e volatilità iniziali nello stesso ordine dei contratti."""
-    prices = spot.set_index("actual_underlying_ticker").loc[list(contracts), "settlement"]
+    settlements = spot[["future_ticker", "settlement"]].dropna().drop_duplicates()
+    prices = settlements.set_index("future_ticker", verify_integrity=True)["settlement"]
+    prices = prices.reindex(contracts)
+    if not prices.between(0, float("inf"), inclusive="neither").fillna(False).all():
+        raise ValueError("Servono settlement iniziali positivi e finiti per entrambi i futures")
+
     volatilities = tuple(
         np.interp(prices[contract], smiles[contract]["K"], smiles[contract]["IV"])
         for contract in contracts
@@ -65,5 +70,7 @@ def initial_conditions(smiles, spot, contracts):
 def prepare_smiles(quotes, spot, contracts):
     """Calcola smile, prezzi e volatilità iniziali dai dati già filtrati per data."""
     smiles = _smiles_by_contract(quotes, contracts)
-    prices, volatilities = initial_conditions(smiles, spot, contracts)
+    emission_date = quotes["date"].iloc[0]
+    initial_spot = spot.loc[spot["date"] == emission_date]
+    prices, volatilities = initial_conditions(smiles, initial_spot, contracts)
     return smiles, prices, volatilities
