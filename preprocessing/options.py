@@ -1,3 +1,6 @@
+import pandas as pd
+
+
 def filter_option_quotes(quotes, min_mid=0.05, max_relative_spread=0.50):
     """Seleziona le opzioni in vita con un mercato sufficientemente liquido."""
     days = quotes["time_to_expiry_days"]
@@ -19,15 +22,29 @@ def filter_smile_quotes(quotes):
     """Seleziona strike, future e settlement validi per la volatilità implicita."""
     strike = quotes["strike"]
     future = quotes["underlying_settlement"]
-    kind = quotes["option_type"]
     price = quotes["settlement_price"]
 
-    valid_inputs = True
-    # valid_inputs = kind.isin(["Call", "Put"])
-    valid_inputs &= (strike > 0) & (strike < float("inf"))
+    valid_inputs = (strike > 0) & (strike < float("inf"))
     valid_inputs &= (future > 0) & (future < float("inf"))
 
-    is_call = (kind == "Call").fillna(False)
-    intrinsic = (future - strike).where(is_call, strike - future).clip(lower=0)
-    upper = future.where(is_call, strike)
-    return quotes.loc[valid_inputs & (price >= intrinsic) & (price < upper)]
+    intrinsic = pd.Series(0.0, index=quotes.index)
+    upper = pd.Series(0.0, index=quotes.index)
+
+    calls = quotes["option_type"] == "Call"
+    puts = quotes["option_type"] == "Put"
+
+    intrinsic.loc[calls] = future.loc[calls] - strike.loc[calls]
+    upper.loc[calls] = future.loc[calls]
+
+    intrinsic.loc[puts] = strike.loc[puts] - future.loc[puts]
+    upper.loc[puts] = strike.loc[puts]
+
+    intrinsic.loc[intrinsic < 0] = 0
+
+    quotes = quotes.loc[
+        valid_inputs
+        & (calls | puts)
+        & (price > intrinsic + 1e-10)
+        & (price < upper)
+    ]
+    return quotes

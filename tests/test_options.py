@@ -6,6 +6,15 @@ from preprocessing.options import filter_option_quotes, filter_smile_quotes
 
 
 class QuoteFilterTests(unittest.TestCase):
+    def test_prices_at_intrinsic_value_are_excluded(self):
+        quotes = pd.DataFrame({
+            "strike": [75, 75, 75, 75],
+            "underlying_settlement": [65.24] * 4,
+            "option_type": ["Put"] * 4,
+            "settlement_price": [9.75, 9.76, 9.76 + 5e-11, 9.77],
+        })
+        self.assertEqual(filter_smile_quotes(quotes).index.tolist(), [3])
+
     def test_liquidity_and_expiration(self):
         quotes = pd.DataFrame({
             "time_to_expiry_days": [1, 1, 1, 1, 1, 0, float("inf")],
@@ -27,7 +36,7 @@ class QuoteFilterTests(unittest.TestCase):
             "settlement_price": [10, 11, 9, 60, float("nan"), 11, 11, 11],
         })
 
-        self.assertEqual(filter_smile_quotes(quotes).index.tolist(), [0, 1])
+        self.assertEqual(filter_smile_quotes(quotes).index.tolist(), [1])
 
 
 if __name__ == "__main__":

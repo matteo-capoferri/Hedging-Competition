@@ -16,7 +16,7 @@ def extract_smile(quotes):
 
     Calculate one smile per contract and day.
     Average call and put IV values when they share the same strike.
-    Prices equal to intrinsic value receive zero IV.
+    Input prices must exceed intrinsic value, as enforced by preprocessing.
     """
     smiles = {}
 
@@ -30,24 +30,16 @@ def extract_smile(quotes):
             volatilities = []
 
             for row in daily_quotes.itertuples(index=False):
-                if row.option_type == "Call":
-                    intrinsic_value = max(row.underlying_settlement - row.strike, 0)
-                else:
-                    intrinsic_value = max(row.strike - row.underlying_settlement, 0)
-
-                if abs(row.settlement_price - intrinsic_value) < 1e-10:
-                    volatility = 0.0
-                else:
-                    volatility = brentq(
-                        lambda sigma: black_76(
-                            row.underlying_settlement,
-                            row.strike,
-                            row.time_to_expiry_days / 365,
-                            sigma,
-                            row.option_type,
-                        ) - row.settlement_price,
-                        1e-10, 5,
-                    )
+                volatility = brentq(
+                    lambda sigma: black_76(
+                        row.underlying_settlement,
+                        row.strike,
+                        row.time_to_expiry_days / 365,
+                        sigma,
+                        row.option_type,
+                    ) - row.settlement_price,
+                    1e-10, 5,
+                )
 
                 strikes.append(row.strike)
                 volatilities.append(volatility)
