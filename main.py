@@ -10,7 +10,7 @@ from build_calendar import build_calendar
 from simulate_paths import simulate_paths
 from plot_smiles import plot_smiles
 from find_K import find_K
-from price_collar import price_collar
+from price_collar import price_collar 
 
 DATA_DIR = Path(__file__).resolve().parent
 EMISSION_DATE = pd.Timestamp("2020-01-06")
@@ -23,16 +23,20 @@ def main():
                  "settlement_price", "underlying_settlement", "time_to_expiry_days"],
     )
     quotes["date"] = pd.to_datetime(quotes["date"])
-    daily_quotes = quotes.loc[quotes["date"] == EMISSION_DATE]
-    options_apr21 = daily_quotes.loc[daily_quotes["actual_underlying_ticker"] == "COJ21"]
-    options_may21 = daily_quotes.loc[daily_quotes["actual_underlying_ticker"] == "COK21"]
+    quotes = quotes.loc[quotes["time_to_expiry_days"]>0]
+    spot = pd.read_excel(DATA_DIR / "COJ21_COZ22_historical_series.xlsx")
+    spot["date"] = pd.to_datetime(spot["date"])
+    
+    options_apr21 = quotes.loc[quotes["actual_underlying_ticker"] == "COJ21"]
+    options_may21 = quotes.loc[quotes["actual_underlying_ticker"] == "COK21"]
+
 
     smiles = {}
     smiles["apr21"] = extract_smile(options_apr21)
     smiles["may21"] = extract_smile(options_may21)
-    print(smiles)
+    print(smiles["apr21"][EMISSION_DATE]["IV"])
 
-    initial_price_apr21 = get_initial_price(options_apr21)
+    initial_price_apr21 = spot
     initial_price_may21 = get_initial_price(options_may21)
     volatility_apr21 = np.interp(initial_price_apr21, smiles["apr21"]["K"], smiles["apr21"]["IV"])
     volatility_may21 = np.interp(initial_price_may21, smiles["may21"]["K"], smiles["may21"]["IV"])
@@ -50,6 +54,6 @@ def main():
 
     K_collar = find_K(paths_apr21, paths_may21, 78)
     P_C = price_collar(paths_apr21, paths_may21, K_collar, 78, 1)
-    print(P_C)#non ancora corretto
+    print(P_C)
 if __name__ == "__main__":
     main()

@@ -24,18 +24,45 @@ def extract_smile(options):
     Quotes with missing option prices are excluded.
     """
     options = options.dropna(subset=["settlement_price"]).sort_values("strike")
-    strikes = []
-    implied_volatilities = []
-    for row in options.itertuples(index=False):
-        volatility = brentq(
-            lambda sigma: black_76(
-                row.underlying_settlement, row.strike,
-                row.time_to_expiry_days / 365, sigma, row.option_type,
-            ) - row.settlement_price,
-            1e-5, 3,
-        )
+    
+    smiles = {}
+    for day in options["date"].unique():
+        for row in options.loc[options["date"]==day].itertuples(index=False):
+            #check if vol is zero
+            if row.option_type == "Call":
+                intrinsic_value = max(row.underlying_settlement - row.strike, 0)
+            else:
+                intrinsic_value = max(row.strike - row.underlying_settlement, 0)
+
+            if abs(row.settlement_price - intrinsic_value) < 1e-10:
+                volatility = 0.0
+            else:
+                difference_low = black_76(
+                    row.underlying_settlement, row.strike,
+                    row.time_to_expiry_days / 365, 1e-5, row.option_type,
+                ) - row.settlement_price
+
+                difference_high = black_76(
+                    row.underlying_settlement, row.strike,
+                    row.time_to_expiry_days / 365, 5, row.option_type,
+                ) - row.settlement_price
+
+                if difference_low * difference_high > 0:
+                    print(day, row)
+                    print("Price differences:", difference_low, difference_high)
+                volatility = brentq(
+                    lambda sigma: black_76(
+                        row.underlying_settlement, row.strike,
+                        row.time_to_expiry_days / 365, sigma, row.option_type,
+                    ) - row.settlement_price,
+                    1e-10, 5,
+                )
+        strikes = []
+        implied_volatilities = []
         strikes.append(row.strike)
         implied_volatilities.append(volatility)
-    smile = pd.DataFrame({"K": strikes, "IV": implied_volatilities})
-    smile = smile.groupby("K", as_index=False)["IV"].mean().sort_values("K")
-    return {"K": smile["K"].tolist(), "IV": smile["IV"].tolist()}
+        smile = pd.DataFrame({"K": strikes, "IV": implied_volatilities})
+        smile = smile.groupby("K", as_index=False)["IV"].mean().sort_values("K")
+        smiles[day] = {"K": smile["K"].tolist(), "IV": smile["IV"].tolist()}
+        
+    return smiles
