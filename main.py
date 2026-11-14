@@ -19,14 +19,14 @@ CALL_STRIKE = 78
 def main(data_dir=DATA_DIR):
     # 1. Prepare market data and calendar
     quotes, spot = prepare_market_data(data_dir, EMISSION_DATE, CONTRACTS)
-    _, time_steps = build_calendar(EMISSION_DATE)
+    _, future, time_steps = build_calendar(EMISSION_DATE, CONTRACTS)
 
     # 2. Extract daily smiles
     smiles = extract_smile(quotes)
 
     # 3. Calculate the collar put strike
     collar_strike = calculate_collar_strike(
-        spot, smiles, EMISSION_DATE, CONTRACTS, time_steps, CALL_STRIKE,
+        spot, smiles, EMISSION_DATE, CONTRACTS, future, time_steps, CALL_STRIKE,
         n_paths=100_000, correlation=0.8, seed=42,
     )
 

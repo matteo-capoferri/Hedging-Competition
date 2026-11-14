@@ -15,7 +15,7 @@ def settlement_for(daily_spot, ticker):
     return prices.item()
 
 
-def calculate_collar_strike(spot, smiles, date, contracts, time_steps, call_strike,
+def calculate_collar_strike(spot, smiles, date, contracts,future, time_steps, call_strike,
                             n_paths=100_000, correlation=0.8, seed=42):
     """
     INPUT:
@@ -53,5 +53,6 @@ def calculate_collar_strike(spot, smiles, date, contracts, time_steps, call_stri
         correlation=correlation,
         seed=seed,
     )
-    collar_strike = find_K(paths_april, paths_may, call_strike)
-    return collar_strike
+    uses_april = future["future_ticker"].eq(contracts[0]).to_numpy()
+    simulated_prices = np.where(uses_april, paths_april, paths_may)
+    return find_K(simulated_prices, call_strike)
