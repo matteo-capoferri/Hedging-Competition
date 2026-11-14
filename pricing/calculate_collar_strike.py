@@ -30,6 +30,8 @@ def calculate_collar_strike(price_april, price_may, smiles, date, contracts, fut
 
     uses_april = future["future_ticker"].eq(contracts[0]).to_numpy()
     forward_avg = np.where(uses_april, price_april, price_may).mean()
+    rng = np.random.default_rng(seed)
+    shocks = rng.standard_normal((n_paths, len(time_steps), 2))
 
     def simulate_average(basket_strike):
         relative_strike = basket_strike / forward_avg
@@ -49,7 +51,7 @@ def calculate_collar_strike(price_april, price_may, smiles, date, contracts, fut
             time_steps=time_steps,
             n_paths=n_paths,
             correlation=correlation,
-            seed=seed,
+            shocks=shocks,
         )
 
         return np.where(uses_april, paths_april, paths_may).mean(axis=1)

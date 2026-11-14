@@ -3,7 +3,7 @@ import numpy as np
 
 def simulate_paths(initial_price_apr21, initial_price_may21,
                    volatility_apr21, volatility_may21, time_steps,
-                   n_paths=100_000, correlation=0.8, seed=42):
+                   n_paths=100_000, correlation=0.8, seed=42, shocks=None):
     """
     INPUT:
         initial_price_apr21 = April futures price at the start of the simulation.
@@ -14,6 +14,8 @@ def simulate_paths(initial_price_apr21, initial_price_may21,
         n_paths = number of simulated paths for each contract; default is 100000.
         correlation = correlation between the two random shocks; default is 0.8.
         seed = random generator seed for repeatable results; default is 42.
+        shocks = optional independent normal draws of shape (n_paths, len(time_steps), 2).
+                 When supplied, these replace random generation.
 
     OUTPUT:
         paths_apr21 = matrix of simulated April futures prices.
@@ -25,8 +27,9 @@ def simulate_paths(initial_price_apr21, initial_price_may21,
     """
     if not -1 <= correlation <= 1:
         raise ValueError("Correlation must be between -1 and 1")
-    rng = np.random.default_rng(seed)
-    shocks = rng.standard_normal((n_paths, len(time_steps), 2))
+    if shocks is None:
+        rng = np.random.default_rng(seed)
+        shocks = rng.standard_normal((n_paths, len(time_steps), 2))
     noise_apr21 = shocks[:, :, 0]
     noise_may21 = correlation * noise_apr21 + np.sqrt(1 - correlation**2) * shocks[:, :, 1]
     increments_apr21 = (
