@@ -3,23 +3,12 @@ import numpy as np
 from models.simulate_paths import simulate_paths
 from pricing.find_K import find_K
 
-# Previene il caso di bid e ask differenti ma stesso settlment
-def settlement_for(daily_spot, ticker):
-    prices = daily_spot.loc[
-        daily_spot["future_ticker"] == ticker, "settlement"
-    ].dropna().unique()
-
-    if len(prices) != 1:
-        raise ValueError(f"Settlement mancante o discordante per {ticker}")
-
-    return prices.item()
-
-
-def calculate_collar_strike(spot, smiles, date, contracts,future, time_steps, call_strike,
+def calculate_collar_strike(price_april, price_may, smiles, date, contracts, future, time_steps, call_strike,
                             n_paths=100_000, correlation=0.8, seed=42):
     """
     INPUT:
-        spot = daily futures prices, with one row per date and contract.
+        price_april = April futures settlement on the valuation date.
+        price_may = May futures settlement on the valuation date.
         smiles = dictionary organized as smiles[contract][date], with K and IV lists.
         date = market date used for initial futures prices and smiles.
         contracts = April and May futures tickers, in this order.
@@ -35,10 +24,6 @@ def calculate_collar_strike(spot, smiles, date, contracts,future, time_steps, ca
 
     Select daily market inputs, simulate both futures, and calculate the put strike.
     """
-    daily_spot = spot.loc[spot["date"] == date]
-
-    price_april = settlement_for(daily_spot, contracts[0])
-    price_may = settlement_for(daily_spot, contracts[1])
 
     smile_april = smiles[contracts[0]][date]
     smile_may = smiles[contracts[1]][date]

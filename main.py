@@ -9,6 +9,7 @@ from plot_smiles import plot_smiles
 from preprocessing.build_calendar import build_calendar
 from preprocessing.market_data import prepare_market_data
 from pricing.calculate_collar_strike import calculate_collar_strike
+from pricing.calculate_collar_strike_mm import calculate_collar_strike_mm
 
 DATA_DIR = Path(__file__).resolve().parent
 EMISSION_DATE = pd.Timestamp("2020-01-06")
@@ -26,13 +27,21 @@ def main(data_dir=DATA_DIR):
 
     # 3. Calculate the collar put strike
     collar_strike = calculate_collar_strike(
-        spot, smiles, EMISSION_DATE, CONTRACTS, future, time_steps, CALL_STRIKE,
+        spot.at[(EMISSION_DATE, CONTRACTS[0]), "settlement"],
+        spot.at[(EMISSION_DATE, CONTRACTS[1]), "settlement"],
+        smiles, EMISSION_DATE, CONTRACTS, future, time_steps, CALL_STRIKE,
         n_paths=100_000, correlation=0.8, seed=42,
+    )
+    collar_strike_mm = calculate_collar_strike_mm(
+        spot.at[(EMISSION_DATE, CONTRACTS[0]), "settlement"],
+        spot.at[(EMISSION_DATE, CONTRACTS[1]), "settlement"],
+        smiles, EMISSION_DATE, CONTRACTS, future, time_steps, CALL_STRIKE,
     )
 
     # 4. Display results
     print("Number of time steps:", len(time_steps))
-    print("Collar put strike:", collar_strike)
+    print("Collar put strike (Monte Carlo):", collar_strike)
+    print("Collar put strike (moment matching):", collar_strike_mm)
     daily_smiles = {}
     for contract in CONTRACTS:
         daily_smiles[contract] = smiles[contract][EMISSION_DATE]
