@@ -4,6 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from backtest.backtesting import sens
 from models.extract_smile import extract_smile
 from plot_smiles import plot_smiles
 from preprocessing.build_calendar import build_calendar
@@ -47,6 +48,15 @@ def main(data_dir=DATA_DIR):
         daily_smiles[contract] = smiles[contract][EMISSION_DATE]
     plot_smiles(daily_smiles, EMISSION_DATE)
     plt.show()
+
+    # sensitivities and backtest
+    delta_april, delta_may = sens(
+        EMISSION_DATE, "MonteCarlo",
+        {"Kp": collar_strike, "Kc": CALL_STRIKE, "DF": 1.0,
+         "contracts": CONTRACTS},
+        spot, smiles,
+    )
+    print("Collar delta (Monte Carlo), April / May:", delta_april, delta_may)
 
 
 if __name__ == "__main__":

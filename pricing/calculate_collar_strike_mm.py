@@ -2,6 +2,7 @@ import numpy as np
 from scipy.optimize import brentq
 
 from models.black76 import black_76
+from pricing.select_vols import select_vols
 
 
 def calculate_collar_strike_mm(price_april, price_may, smiles, issue_date, contracts, future,
@@ -40,9 +41,10 @@ def calculate_collar_strike_mm(price_april, price_may, smiles, issue_date, contr
         if strike == 0:
             return 0.0 if kind == "Put" else forward_avg
 
-        relative_strike = strike / forward_avg
-        vol_april = np.interp(price_april * relative_strike, smile_april["K"], smile_april["IV"])
-        vol_may = np.interp(price_may * relative_strike, smile_may["K"], smile_may["IV"])
+        vol_april, vol_may = select_vols(
+            strike, price_april, price_may, forward_avg,
+            smile_april, smile_may,
+        )
 
         var_april = price_april**2 * np.expm1(vol_april**2 * shared_april).mean()
         var_may = price_may**2 * np.expm1(vol_may**2 * shared_may).mean()

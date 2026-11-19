@@ -2,6 +2,7 @@ import numpy as np
 
 from models.simulate_paths import simulate_paths
 from pricing.find_K import find_K
+from pricing.select_vols import select_vols
 
 def calculate_collar_strike(price_april, price_may, smiles, date, contracts, future, time_steps, call_strike,
                             n_paths=100_000, correlation=0.8, seed=42):
@@ -34,13 +35,9 @@ def calculate_collar_strike(price_april, price_may, smiles, date, contracts, fut
     shocks = rng.standard_normal((n_paths, len(time_steps), 2))
 
     def simulate_average(basket_strike):
-        relative_strike = basket_strike / forward_avg
-
-        vol_april = np.interp(
-            price_april * relative_strike, smile_april["K"], smile_april["IV"]
-        )
-        vol_may = np.interp(
-            price_may * relative_strike, smile_may["K"], smile_may["IV"]
+        vol_april, vol_may = select_vols(
+            basket_strike, price_april, price_may, forward_avg,
+            smile_april, smile_may,
         )
 
         paths_april, paths_may = simulate_paths(
