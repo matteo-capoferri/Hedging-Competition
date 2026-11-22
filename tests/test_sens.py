@@ -4,7 +4,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-from backtest.backtesting import sens
+from backtest.backtesting import price_and_deltas
 from models.simulate_paths import simulate_paths
 from preprocessing.build_calendar import build_calendar
 from pricing.select_vols import select_vols
@@ -53,15 +53,16 @@ class SensTests(unittest.TestCase):
 
         expected = [(price(60.006, 64) - price(59.994, 64)) / 0.012,
                     (price(60, 64.0064) - price(60, 63.9936)) / 0.0128]
-        with patch("backtest.backtesting.simulate_paths", wraps=simulate_paths) as simulator:
-            actual = sens(self.day, "MonteCarlo", self.args, self.spot, self.smiles)
-        self.assertEqual(simulator.call_count, 8)
-        np.testing.assert_allclose(actual, expected, rtol=1e-9, atol=1e-10)
-        self.assertTrue(all(delta <= 0 for delta in actual))
+        with patch("pricing.simulate_leg.simulate_paths", wraps=simulate_paths) as simulator:
+            value, april, may = price_and_deltas(self.day, "MonteCarlo", self.args, self.spot, self.smiles)
+        self.assertEqual(simulator.call_count, 10)
+        self.assertAlmostEqual(value, price(60.0, 64.0))
+        np.testing.assert_allclose([april, may], expected, rtol=1e-9, atol=1e-10)
+        self.assertTrue(april <= 0 and may <= 0)
 
     def test_unsupported_cases_are_explicit(self):
         with self.assertRaises(NotImplementedError):
-            sens(self.day, "MomentMatching", self.args, self.spot, self.smiles)
+            price_and_deltas(self.day, "MomentMatching", self.args, self.spot, self.smiles)
 
     def test_fixings_roll_and_fully_fixed(self):
         for day in ["2021-02-01", "2021-02-15", "2021-02-24", "2021-02-25", "2021-02-26"]:
@@ -77,13 +78,13 @@ class SensTests(unittest.TestCase):
                 spot = pd.DataFrame({"settlement": list(rows.values())},
                                     index=pd.MultiIndex.from_tuples(list(rows)))
                 args = dict(self.args, Kp=100.0, Kc=120.0)
-                actual = sens(today, "MonteCarlo", args, spot, smiles)
+                actual = price_and_deltas(today, "MonteCarlo", args, spot, smiles)
                 expected = [-0.97 * future["future_ticker"].eq(c).sum() / 20
                             for c in self.contracts]
-                np.testing.assert_allclose(actual, expected, atol=1e-10)
+                np.testing.assert_allclose(actual, [0.97 * (100 - 60), *expected], atol=1e-10)
                 # Non-positive effective strikes: zero put and linear call.
-                actual = sens(today, "MonteCarlo", dict(args, Kp=0, Kc=1), spot, smiles)
-                np.testing.assert_allclose(actual, expected, atol=1e-10)
+                actual = price_and_deltas(today, "MonteCarlo", dict(args, Kp=0, Kc=1), spot, smiles)
+                np.testing.assert_allclose(actual, [-0.97 * (60 - 1), *expected], atol=1e-10)
 
     def test_price_collar_separate_legs_and_observed_fixings(self):
         value = price_collar([50], np.array([[40.0], [60.0]]), 55, 60, 0.9,

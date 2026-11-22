@@ -4,7 +4,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from backtest.backtesting import sens
+from backtest.backtesting import price_and_deltas
+from models.estimate_rho import estimate_rho
 from models.extract_smile import extract_smile
 from plot_smiles import plot_smiles
 from preprocessing.build_calendar import build_calendar
@@ -21,6 +22,7 @@ CALL_STRIKE = 78
 def main(data_dir=DATA_DIR):
     # 1. Prepare market data and calendar
     quotes, spot = prepare_market_data(data_dir, EMISSION_DATE, CONTRACTS)
+    rho = estimate_rho(EMISSION_DATE, spot, CONTRACTS)
     _, future, time_steps = build_calendar(EMISSION_DATE, CONTRACTS)
 
     # 2. Extract daily smiles
@@ -31,16 +33,18 @@ def main(data_dir=DATA_DIR):
         spot.at[(EMISSION_DATE, CONTRACTS[0]), "settlement"],
         spot.at[(EMISSION_DATE, CONTRACTS[1]), "settlement"],
         smiles, EMISSION_DATE, CONTRACTS, future, time_steps, CALL_STRIKE,
-        n_paths=100_000, correlation=0.8, seed=42,
+        n_paths=100_000, correlation=rho, seed=42,
     )
     collar_strike_mm = calculate_collar_strike_mm(
         spot.at[(EMISSION_DATE, CONTRACTS[0]), "settlement"],
         spot.at[(EMISSION_DATE, CONTRACTS[1]), "settlement"],
         smiles, EMISSION_DATE, CONTRACTS, future, time_steps, CALL_STRIKE,
+        correlation=rho,
     )
 
     # 4. Display results
     print("Number of time steps:", len(time_steps))
+    print("Futures correlation at issue:", rho)
     print("Collar put strike (Monte Carlo):", collar_strike)
     print("Collar put strike (moment matching):", collar_strike_mm)
     daily_smiles = {}
@@ -50,12 +54,13 @@ def main(data_dir=DATA_DIR):
     plt.show()
 
     # sensitivities and backtest
-    delta_april, delta_may = sens(
+    value, delta_april, delta_may = price_and_deltas(
         EMISSION_DATE, "MonteCarlo",
         {"Kp": collar_strike, "Kc": CALL_STRIKE, "DF": 1.0,
-         "contracts": CONTRACTS},
+         "contracts": CONTRACTS, "correlation": rho},
         spot, smiles,
     )
+    print("Collar value at issue (USD/bbl):", value)
     print("Collar delta (Monte Carlo), April / May:", delta_april, delta_may)
 
 
