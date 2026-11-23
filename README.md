@@ -15,6 +15,13 @@ cartella superiore, avviare `main.py --data-dir ..` con lo stesso interprete.
 
 ## Preprocessing
 
+Il backtest include i fixing SOFR dal 3 gennaio 2020 al 26 febbraio 2021 in
+`data/SOFR.csv` ([serie SOFR, New York Fed tramite FRED](https://fred.stlouisfed.org/series/SOFR)).
+La cassa matura al tasso realizzato ACT/360. Per scontare il collar fino
+all'ultimo fixing si assume una curva piatta all'ultimo tasso già pubblicato,
+con capitalizzazione giornaliera. Per un altro periodo occorre estendere
+il CSV includendo almeno il fixing disponibile all'emissione.
+
 Le due funzioni sono in `preprocessing/options.py`.
 
 - `filter_option_quotes` seleziona opzioni in vita con bid e ask validi,
