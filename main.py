@@ -4,7 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from backtest.backtesting import price_and_deltas
+from backtest.run_backtest import run_backtest
 from models.estimate_rho import estimate_rho
 from models.extract_smile import extract_smile
 from plot_smiles import plot_smiles
@@ -14,6 +14,9 @@ from pricing.calculate_collar_strike import calculate_collar_strike
 from pricing.calculate_collar_strike_mm import calculate_collar_strike_mm
 
 DATA_DIR = Path(__file__).resolve().parent
+if not (DATA_DIR / "unpivoted_bid_offer_train_clean.parquet").is_file():
+    if (DATA_DIR.parent / "unpivoted_bid_offer_train_clean.parquet").is_file():
+        DATA_DIR = DATA_DIR.parent
 EMISSION_DATE = pd.Timestamp("2020-01-06")
 CONTRACTS = ("COJ21", "COK21")
 CALL_STRIKE = 78
@@ -50,18 +53,25 @@ def main(data_dir=DATA_DIR):
     daily_smiles = {}
     for contract in CONTRACTS:
         daily_smiles[contract] = smiles[contract][EMISSION_DATE]
-    plot_smiles(daily_smiles, EMISSION_DATE)
-    plt.show()
-
-    # sensitivities and backtest
-    value, delta_april, delta_may = price_and_deltas(
-        EMISSION_DATE, "MonteCarlo",
-        {"Kp": collar_strike, "Kc": CALL_STRIKE, "DF": 1.0,
-         "contracts": CONTRACTS, "correlation": rho},
+    # 5. Tutte le sedute dall'emissione all'ultimo fixing, inclusi.
+    last_fixing = future["date"].max()
+    market_dates = spot.index.get_level_values("date").unique().sort_values()
+    dates = market_dates[(market_dates >= EMISSION_DATE) & (market_dates <= last_fixing)]
+    backtest = run_backtest(
+        dates,
+        {"Kp": collar_strike, "Kc": CALL_STRIKE, "DF": 1.0, "contracts": CONTRACTS},
         spot, smiles,
     )
-    print("Collar value at issue (USD/bbl):", value)
-    print("Collar delta (Monte Carlo), April / May:", delta_april, delta_may)
+    # 6. Media dei P&L giornalieri al quadrato, inclusi i costi di apertura.
+    hedged_score = backtest["daily_pnl"].pow(2).mean(skipna=False)
+    unhedged_score = backtest["collar_pnl"].pow(2).mean(skipna=False)
+    print(f"Sedute: {len(backtest)} (dal {dates[0]:%d/%m/%Y} al {dates[-1]:%d/%m/%Y})")
+    print(f"Punteggio con copertura, prima degli interessi: {hedged_score:,.2f} USD²")
+    print(f"Punteggio senza copertura: {unhedged_score:,.2f} USD²")
+
+    plot_smiles(daily_smiles, EMISSION_DATE)
+    plt.show()
+    return backtest
 
 
 if __name__ == "__main__":
