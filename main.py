@@ -27,12 +27,12 @@ CALL_STRIKE = 78
 
 def main(data_dir=DATA_DIR, output_dir=Path("output/backtest")):
     # 1. Prepare market data and calendar
-    quotes, spot = prepare_market_data(data_dir, EMISSION_DATE, CONTRACTS)
+    quotes, spot = prepare_market_data(data_dir, EMISSION_DATE, CONTRACTS, all_options=True)
     rho = estimate_rho(EMISSION_DATE, spot, CONTRACTS)
     _, future, time_steps = build_calendar(EMISSION_DATE, CONTRACTS)
 
     # 2. Extract daily smiles
-    smiles = extract_smile(quotes)
+    smiles = extract_smile(quotes.loc[quotes["actual_underlying_ticker"].isin(CONTRACTS)])
 
     # 3. Calculate the collar put strike
     collar_strike = calculate_collar_strike(
@@ -65,6 +65,7 @@ def main(data_dir=DATA_DIR, output_dir=Path("output/backtest")):
         dates,
         {"Kp": collar_strike_mm, "Kc": CALL_STRIKE, "contracts": CONTRACTS},
         spot, smiles, sofr=sofr, payment_date=last_fixing, method="mm",
+        quotes=quotes,
     )
     # Controllo sui dati reali: monitora che strike e pricing MM siano coerenti all'apertura.
     initial_value_usd = 1_000_000 * backtest["collar_value_per_barrel"].iloc[0]

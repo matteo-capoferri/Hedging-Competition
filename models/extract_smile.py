@@ -1,7 +1,5 @@
 import pandas as pd
-from scipy.optimize import brentq
-
-from models.black76 import black_76
+from models.black76 import implied_volatility
 
 
 def extract_smile(quotes):
@@ -30,15 +28,12 @@ def extract_smile(quotes):
             volatilities = []
 
             for row in daily_quotes.itertuples(index=False):
-                volatility = brentq(
-                    lambda sigma: black_76(
+                volatility = implied_volatility(
                         row.underlying_settlement,
                         row.strike,
                         row.time_to_expiry_days / 365,
-                        sigma,
+                        row.settlement_price,
                         row.option_type,
-                    ) - row.settlement_price,
-                    1e-10, 5,
                 )
 
                 strikes.append(row.strike)

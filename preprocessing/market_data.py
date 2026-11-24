@@ -3,16 +3,18 @@ import pandas as pd
 from preprocessing.options import filter_option_quotes, filter_smile_quotes
 
 
-def prepare_market_data(data_dir, emission_date, contracts):
+def prepare_market_data(data_dir, emission_date, contracts, all_options=False):
     """Return filtered option quotes and futures history indexed by date and ticker."""
     quotes = pd.read_parquet(
         data_dir / "unpivoted_bid_offer_train_clean.parquet",
-        columns=["date", "actual_underlying_ticker", "strike", "option_type",
+        columns=["date", "option_ticker", "expiration", "actual_underlying_ticker", "strike", "option_type",
                  "settlement_price", "underlying_settlement", "time_to_expiry_days",
                  "option_bid", "option_ask", "underlying_bid", "underlying_ask"],
     )
     quotes["date"] = pd.to_datetime(quotes["date"])
-    quotes = quotes.loc[quotes["actual_underlying_ticker"].isin(contracts)]
+    quotes["expiration"] = pd.to_datetime(quotes["expiration"])
+    if not all_options:
+        quotes = quotes.loc[quotes["actual_underlying_ticker"].isin(contracts)]
     spot = load_futures(data_dir, quotes, contracts)
     spot = settlement_for(spot)
     spot = spot.set_index(["date", "future_ticker"])
