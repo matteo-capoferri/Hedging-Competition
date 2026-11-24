@@ -4,14 +4,18 @@ from backtest.backtesting import price_and_deltas
 from backtest.hedge import rebalance_future, target_futures
 from models.estimate_rho import estimate_rho
 from preprocessing.sofr import discount_factor
+from pricing.collar_vegas import collar_vegas
 
 
 def run_backtest(dates, pricing_arguments, spot, smiles,
-                 barrels=1_000_000, lot_size=1_000, *, sofr=None, payment_date=None):
+                 barrels=1_000_000, lot_size=1_000, *, sofr=None, payment_date=None,
+                 method="MonteCarlo"):
     """Delta hedge dall'emissione, con P&L in USD e funding SOFR opzionale.
 
     La prima data corrisponde all'apertura del collar a costo zero.
     Gli strike sono fissi e la correlazione viene stimata a ogni seduta.
+    method: "MonteCarlo" for simulation or "mm" for moment matching.
+    Vega columns describe separate +1 bp smile stresses, not option hedge trades.
     """
     dates = pd.DatetimeIndex(dates)
     if dates.empty or dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
@@ -38,7 +42,10 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
             daily_arguments["DF"] = discount_factor(today, payment_date, rate)
             interest_pnl = cash * (sofr.at[today, "cash_growth"] - 1)
         value, delta_april, delta_may = price_and_deltas(
-            today, "MonteCarlo", daily_arguments, spot, smiles
+            today, method, daily_arguments, spot, smiles
+        )
+        vega_april, vega_may = collar_vegas(
+            today, method, daily_arguments, spot, smiles
         )
         collar_pnl = 0.0 if previous_value is None else barrels * (value - previous_value)
 
@@ -71,12 +78,16 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
             "collar_value_per_barrel": value,
             "delta_april": delta_april,
             "delta_may": delta_may,
+            "vega_april_per_barrel": vega_april,
+            "vega_may_per_barrel": vega_may,
+            "april_vol_up_1bp_pnl_usd": barrels * vega_april * 0.0001,
+            "may_vol_up_1bp_pnl_usd": barrels * vega_may * 0.0001,
             "position_april": positions[contracts[0]],
             "position_may": positions[contracts[1]],
             "collar_pnl": collar_pnl,
             "futures_pnl": futures_pnl,
             "execution_pnl": execution_pnl,
-            "daily_pnl": collar_pnl + futures_pnl + execution_pnl + interest_pnl,
+            "delta_hedged_pnl": collar_pnl + futures_pnl + execution_pnl + interest_pnl,
             "cash": cash,
             "portfolio_value": barrels * value + cash,
         })

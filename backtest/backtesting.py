@@ -8,6 +8,7 @@ from preprocessing.market_inputs import market_inputs
 from preprocessing.read_fixings import read_fixings
 from pricing.central_delta import central_delta
 from pricing.make_collar_pricer import make_collar_pricer
+from pricing.make_collar_pricer_mm import make_collar_pricer_mm
 from pricing.price_collar import price_collar
 
 
@@ -18,9 +19,10 @@ def price_and_deltas(today, method, pricing_arguments, spot, smiles):
     hanno i default indicati sotto. La valutazione avviene dopo il fixing
     di oggi. Strike, fixing osservati e DF restano fissi nei bump; le IV
     cambiano secondo sticky moneyness, usando lo strike residuo equivalente.
+    method: "MonteCarlo" or "mm"; both use the same central-difference deltas.
     """
-    if method != "MonteCarlo":
-        raise NotImplementedError("price_and_deltas currently supports only MonteCarlo")
+    if method not in ("MonteCarlo", "mm"):
+        raise NotImplementedError("Choose MonteCarlo or mm")
 
     today = pd.Timestamp(today)
     contracts = pricing_arguments["contracts"]
@@ -52,7 +54,8 @@ def price_and_deltas(today, method, pricing_arguments, spot, smiles):
         rho = estimate_rho(today, spot, contracts)
         pricing_arguments = dict(pricing_arguments, correlation=rho)
 
-    collar_value = make_collar_pricer(
+    make_pricer = make_collar_pricer_mm if method == "mm" else make_collar_pricer
+    collar_value = make_pricer(
         observed_prices, uses_april, time_steps, april_market, may_market, pricing_arguments
     )
 
