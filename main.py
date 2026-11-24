@@ -13,6 +13,7 @@ from preprocessing.market_data import prepare_market_data
 from preprocessing.sofr import prepare_sofr
 from pricing.calculate_collar_strike import calculate_collar_strike
 from pricing.calculate_collar_strike_mm import calculate_collar_strike_mm
+from reporting.backtest_report import save_backtest_report
 
 DATA_DIR = Path(__file__).resolve().parent
 SOFR_FILE = DATA_DIR / "data" / "SOFR.csv"
@@ -24,7 +25,7 @@ CONTRACTS = ("COJ21", "COK21")
 CALL_STRIKE = 78
 
 
-def main(data_dir=DATA_DIR):
+def main(data_dir=DATA_DIR, output_dir=Path("output/backtest")):
     # 1. Prepare market data and calendar
     quotes, spot = prepare_market_data(data_dir, EMISSION_DATE, CONTRACTS)
     rho = estimate_rho(EMISSION_DATE, spot, CONTRACTS)
@@ -62,15 +63,20 @@ def main(data_dir=DATA_DIR):
     sofr = prepare_sofr(SOFR_FILE, dates)
     backtest = run_backtest(
         dates,
-        {"Kp": collar_strike, "Kc": CALL_STRIKE, "contracts": CONTRACTS},
+        {"Kp": collar_strike_mm, "Kc": CALL_STRIKE, "contracts": CONTRACTS},
         spot, smiles, sofr=sofr, payment_date=last_fixing, method="mm",
     )
+    # Controllo sui dati reali: monitora che strike e pricing MM siano coerenti all'apertura.
+    initial_value_usd = 1_000_000 * backtest["collar_value_per_barrel"].iloc[0]
+    if not abs(initial_value_usd) < 0.01:
+        raise ValueError(f"Il collar MM non parte a costo zero: {initial_value_usd:.6f} USD")
     # 6. Media dei P&L giornalieri al quadrato, inclusi i costi di apertura.
     hedged_score = backtest["delta_hedged_pnl"].pow(2).mean(skipna=False)
     unhedged_score = backtest["collar_pnl"].pow(2).mean(skipna=False)
     print(f"Sedute: {len(backtest)} (dal {dates[0]:%d/%m/%Y} al {dates[-1]:%d/%m/%Y})")
     print(f"Punteggio con copertura e interessi SOFR: {hedged_score:,.2f} USD²")
     print(f"Punteggio senza copertura: {unhedged_score:,.2f} USD²")
+    save_backtest_report(backtest, output_dir)
 
     plot_smiles(daily_smiles, EMISSION_DATE)
     plt.show()
@@ -80,4 +86,6 @@ def main(data_dir=DATA_DIR):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--data-dir", type=Path, default=DATA_DIR)
-    main(parser.parse_args().data_dir)
+    parser.add_argument("--output-dir", type=Path, default=Path("output/backtest"))
+    args = parser.parse_args()
+    main(args.data_dir, args.output_dir)

@@ -1,6 +1,7 @@
 import pandas as pd
 
 from backtest.backtesting import price_and_deltas
+from backtest.check_accounting import check_accounting
 from backtest.hedge import rebalance_future, target_futures
 from models.estimate_rho import estimate_rho
 from preprocessing.sofr import discount_factor
@@ -13,6 +14,9 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
     """Delta hedge dall'emissione, con P&L in USD e funding SOFR opzionale.
 
     La prima data corrisponde all'apertura del collar a costo zero.
+    Il patrimonio prima dell'apertura e' zero: un eventuale valore iniziale
+    del collar entra nel P&L. Il payoff finale resta nel valore del collar
+    (non viene anche accreditato in cassa).
     Gli strike sono fissi e la correlazione viene stimata a ogni seduta.
     method: "MonteCarlo" for simulation or "mm" for moment matching.
     Vega columns describe separate +1 bp smile stresses, not option hedge trades.
@@ -47,7 +51,7 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
         vega_april, vega_may = collar_vegas(
             today, method, daily_arguments, spot, smiles
         )
-        collar_pnl = 0.0 if previous_value is None else barrels * (value - previous_value)
+        collar_pnl = barrels * (value - (0.0 if previous_value is None else previous_value))
 
         futures_pnl = 0.0
         execution_pnl = 0.0
@@ -93,4 +97,7 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
         })
         previous_value = value
 
-    return pd.DataFrame(rows).set_index("date")
+    result = pd.DataFrame(rows).set_index("date")
+    # Monitora la contabilità anche sui dati reali; verificato nei test contabili.
+    result["accounting_error"] = check_accounting(result)
+    return result
