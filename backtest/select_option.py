@@ -13,7 +13,9 @@ def select_option(today, contract, quotes, previous=None):
         option = selected row, or None if no suitable option exists.
             date remains the original quote date when carrying prices forward.
 
-    Keep the same option until fewer than 15 calendar days remain.
+    Keep the option only while at least 15 days remain and its strike is nearest
+    to today's future price among available strikes on the same future and expiry.
+    Equal-distance strikes are both acceptable, avoiding unnecessary switches.
     New selections require 30 days; rank by ATM distance, then bid-ask spread.
     Try the requested future first, then positive correlations in descending order.
     Correlations use up to 60 recent sessions and at least 20 common log returns.
@@ -21,14 +23,26 @@ def select_option(today, contract, quotes, previous=None):
     daily = quotes.loc[quotes["date"] == today]
     if previous is not None and (previous["expiration"] - today).days >= 15:
         current = daily.loc[daily["option_ticker"] == previous["option_ticker"]]
-        if not current.empty:
-            return current.iloc[0].copy()
-        warnings.warn(
-            f"{previous['option_ticker']} on {today:%Y-%m-%d}: using filtered quote "
-            f"from {previous['date']:%Y-%m-%d}; no current eligible quote",
-            RuntimeWarning, stacklevel=2,
-        )
-        return previous.copy()
+        alternatives = daily.loc[
+            (daily["actual_underlying_ticker"] == previous["actual_underlying_ticker"])
+            & (daily["expiration"] == previous["expiration"])
+        ]
+        still_atm = True
+        if not alternatives.empty:
+            future_price = alternatives["underlying_settlement"].iloc[0]
+            nearest_distance = abs(alternatives["strike"] - future_price).min()
+            current_distance = abs(previous["strike"] - future_price)
+            still_atm = current_distance <= nearest_distance + 1e-10
+        if still_atm:
+            if not current.empty:
+                return current.iloc[0].copy()
+            warnings.warn(
+                f"{previous['option_ticker']} on {today:%Y-%m-%d}: using filtered quote "
+                f"from {previous['date']:%Y-%m-%d}; no current eligible quote. "
+                "ATM status cannot be verified when no same-expiry quotes are available.",
+                RuntimeWarning, stacklevel=2,
+            )
+            return previous.copy()
     # Start with the original underlying. Build the fallback order only if needed.
     underlying_order = [contract]
     for underlying in underlying_order:
