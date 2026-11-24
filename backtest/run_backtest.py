@@ -1,8 +1,9 @@
 import pandas as pd
+from math import isfinite
 
 from backtest.backtesting import price_and_deltas
 from backtest.check_accounting import check_accounting
-from backtest.hedge import rebalance_future, target_futures
+from backtest.hedge import rebalance_future, rebalance_option, target_futures
 from backtest.select_option import select_option
 from models.black76 import implied_volatility, black_greeks
 from models.estimate_rho import estimate_rho
@@ -18,6 +19,7 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
         dates = unique trading dates in chronological order, starting at issue.
         pricing_arguments = dictionary containing Kp, Kc and contracts (April, May),
             plus optional pricing settings. Supply DF when sofr is None.
+            Optional vega_betas[(contract, underlying)] supplies today's proxy IV beta.
         spot = futures settlement, bid and ask prices, indexed by date and ticker.
         smiles = daily volatility smiles: smiles[contract][date] contains K and IV.
         barrels = collar notional in barrels.
@@ -41,8 +43,8 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
     Strikes remain fixed; futures correlation is estimated again each day.
     Initial wealth is zero, so the initial collar value enters P&L. The final
     payoff stays in the collar value and is not also credited to cash.
-    Options are only selected and analysed here: option trades and their P&L
-    are not implemented yet.
+    Step 4 records option positions and execution P&L separately. These are not
+    yet included in cash, portfolio P&L or the futures delta hedge.
     """
     # --- Validate the calendar and funding data ---
     dates = pd.DatetimeIndex(dates)
@@ -58,15 +60,15 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
     contracts = pricing_arguments["contracts"]
     positions = dict.fromkeys(contracts, 0)
     selected_options = dict.fromkeys(contracts)
+    option_tickers = dict.fromkeys(contracts)
+    option_quantities = dict.fromkeys(contracts, 0)
     previous_settlements = {}
     previous_value = None
     cash = 0.0
     rows = []
 
     for today in dates:
-        # --- 1. Prepare today's market inputs and interest on yesterday's cash ---
-        # Existing futures are marked to market in step 5, before trading.
-        # TODO: Mark existing option positions using today's available quotes.
+        # --- 1. Prepare market inputs and mark yesterday's portfolio to market ---
         rho = estimate_rho(today, spot, contracts)
         daily_arguments = dict(pricing_arguments, correlation=rho)
         interest_pnl = 0.0
@@ -74,14 +76,24 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
             rate = sofr.at[today, "known_rate"]
             daily_arguments["DF"] = discount_factor(today, payment_date, rate)
             interest_pnl = cash * (sofr.at[today, "cash_growth"] - 1)
-        # --- 2. Value the collar and calculate its delta and vega ---
+        futures_pnl = 0.0
+        for contract in contracts:
+            if positions[contract] != 0:
+                settlement = spot.at[(today, contract), "settlement"]
+                price_change = settlement - previous_settlements[contract]
+                futures_pnl += positions[contract] * lot_size * price_change
+
+        # The existing pricer returns value and deltas together; call it only once.
         value, delta_april, delta_may = price_and_deltas(
             today, method, daily_arguments, spot, smiles
         )
+        collar_pnl = barrels * (value - (0.0 if previous_value is None else previous_value))
+        # TODO: Add daily settlement P&L for yesterday's option holdings.
+
+        # --- 2. Complete today's collar sensitivities (deltas are already available) ---
         vega_april, vega_may = collar_vegas(
             today, method, daily_arguments, spot, smiles
         )
-        collar_pnl = barrels * (value - (0.0 if previous_value is None else previous_value))
 
         # --- 3. Select hedge options and calculate their Greeks ---
         option_results = {}
@@ -115,12 +127,66 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
                                        f"selected_{leg}_vega": vega,
                                        f"selected_{leg}_quote_date": option["date"]})
 
-        # --- 4. Rebalance options to hedge vega (TODO) ---
-        # Calculate target quantities and execute at bid/ask (no upfront premium).
+        # --- 4. Same ticker: adjust quantity. Different ticker: close, then open. ---
+        if quotes is not None:
+            daily_quotes = quotes.loc[quotes["date"] == today]
+            for contract, leg, collar_vega in zip(contracts, ("april", "may"), (vega_april, vega_may)):
+                option_results[f"option_{leg}_execution_pnl"] = 0.0
+                option_results[f"option_{leg}_status"] = "unchanged"
+                option = selected_options[contract]
+                new_ticker = None if option is None else option["option_ticker"]
+                old_ticker = option_tickers[contract]
 
-        # --- 5. Mark existing futures and rebalance the delta hedge ---
+                beta = 1.0
+                if option is not None and option["actual_underlying_ticker"] != contract:
+                    beta = daily_arguments.get("vega_betas", {}).get(
+                        (contract, option["actual_underlying_ticker"]), float("nan")
+                    )
+                    if not isfinite(beta):
+                        option_results[f"option_{leg}_status"] = "missing_iv_beta"
+                        continue
+
+                # Different ticker (including None): close the previous position first.
+                if old_ticker is not None and old_ticker != new_ticker:
+                    old_quote = daily_quotes.loc[daily_quotes["option_ticker"] == old_ticker]
+                    if old_quote.empty:
+                        option_results[f"option_{leg}_status"] = "missing_closing_quote"
+                        continue
+                    old_quote = old_quote.iloc[0]
+                    quantity, pnl = rebalance_future(
+                        option_quantities[contract], 0, old_quote["option_bid"],
+                        old_quote["option_ask"], old_quote["settlement_price"], lot_size,
+                    )
+                    option_quantities[contract] = quantity
+                    option_results[f"option_{leg}_execution_pnl"] += pnl
+                    if quantity != 0:
+                        option_results[f"option_{leg}_status"] = "missing_closing_quote"
+                        continue
+                    option_tickers[contract] = None
+                    option_results[f"option_{leg}_status"] = "closed"
+
+                if option is None:
+                    continue
+                if option["date"] != today:
+                    option_results[f"option_{leg}_status"] = "stale_quote"
+                    continue
+                # Same ticker: trade the difference. After a closure, quantity is zero.
+                quantity, pnl = rebalance_option(
+                    option_quantities[contract], collar_vega, option_results[f"selected_{leg}_vega"],
+                    option["option_bid"], option["option_ask"], option["settlement_price"],
+                    beta=beta, barrels=barrels, lot_size=lot_size,
+                )
+                option_quantities[contract] = quantity
+                option_tickers[contract] = new_ticker if quantity != 0 else None
+                option_results[f"option_{leg}_execution_pnl"] += pnl
+                option_results[f"option_{leg}_status"] = "rebalanced"
+
+            for contract, leg in zip(contracts, ("april", "may")):
+                option_results[f"held_{leg}_ticker"] = option_tickers[contract]
+                option_results[f"held_{leg}_quantity"] = option_quantities[contract]
+
+        # --- 5. Rebalance futures using today's delta targets ---
         # TODO: Include the delta of actual option holdings in each futures target.
-        futures_pnl = 0.0
         execution_pnl = 0.0
         for contract, delta in zip(contracts, (delta_april, delta_may)):
             old_position = positions[contract]
@@ -128,12 +194,8 @@ def run_backtest(dates, pricing_arguments, spot, smiles,
             if old_position == 0 and target == 0:
                 continue
 
-            # Yesterday's position earns today's price movement before rebalancing.
             quote = spot.loc[(today, contract)]
             settlement = quote["settlement"]
-            if old_position != 0:
-                price_change = settlement - previous_settlements[contract]
-                futures_pnl += old_position * lot_size * price_change
 
             positions[contract], trade_pnl = rebalance_future(
                 old_position, target, quote["bid"], quote["ask"], settlement, lot_size
