@@ -72,7 +72,7 @@ def main(data_dir=DATA_DIR, output_dir=Path("output/backtest")):
     if not abs(initial_value_usd) < 0.01:
         raise ValueError(f"Il collar MM non parte a costo zero: {initial_value_usd:.6f} USD")
     # 6. Media dei P&L giornalieri al quadrato, inclusi i costi di apertura.
-    hedged_score = backtest["delta_hedged_pnl"].pow(2).mean(skipna=False)
+    hedged_score = backtest["hedged_pnl"].pow(2).mean(skipna=False)
     unhedged_score = backtest["collar_pnl"].pow(2).mean(skipna=False)
     print(f"Sedute: {len(backtest)} (dal {dates[0]:%d/%m/%Y} al {dates[-1]:%d/%m/%Y})")
     print(f"Punteggio con copertura e interessi SOFR: {hedged_score:,.2f} USD²")

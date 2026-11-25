@@ -6,7 +6,7 @@ import pandas as pd
 
 from backtest.run_backtest import run_backtest
 from backtest.hedge import rebalance_future
-from backtest.check_accounting import check_accounting
+from backtest.backtesting import check_accounting
 
 
 class BacktestAccountingTests(unittest.TestCase):
@@ -37,10 +37,10 @@ class BacktestAccountingTests(unittest.TestCase):
             })
             return actual, pnl
 
-        with patch("backtest.run_backtest.price_and_deltas", side_effect=valuations), \
-             patch("backtest.run_backtest.collar_vegas", return_value=(0.0, 0.0)), \
-             patch("backtest.run_backtest.estimate_rho", return_value=0.8), \
-             patch("backtest.run_backtest.rebalance_future", side_effect=monitor_rebalance):
+        with patch("backtest.backtesting.price_and_deltas", side_effect=valuations), \
+             patch("backtest.backtesting.collar_vegas", return_value=(0.0, 0.0)), \
+             patch("backtest.backtesting.estimate_rho", return_value=0.8), \
+             patch("backtest.hedge.rebalance_future", side_effect=monitor_rebalance):
             result = run_backtest(
                 dates, dict(Kp=50, Kc=78, DF=1.0, contracts=contracts),
                 spot, {}, barrels=1000, lot_size=1000,

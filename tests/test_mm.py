@@ -4,7 +4,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-from backtest.backtesting import price_and_deltas
+from sensitivities.price_and_deltas import price_and_deltas
 from preprocessing.build_calendar import build_calendar
 from pricing.make_collar_pricer_mm import make_collar_pricer_mm
 from models.black76 import black_76

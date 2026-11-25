@@ -4,9 +4,9 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from backtest.backtesting import price_and_deltas
+from sensitivities.price_and_deltas import price_and_deltas
 from preprocessing.build_calendar import build_calendar
-from pricing.collar_vegas import collar_vegas
+from sensitivities.collar_vegas import collar_vegas
 from models.black76 import black_76
 
 
